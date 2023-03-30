@@ -6,7 +6,7 @@
 # blog: www.alonemonkey.com
 
 # mod by jkh - https://github.com/jkhda456/frida-ios-dump
-# 2020/03/08
+# 2023/03/30
 
 from __future__ import print_function
 from __future__ import unicode_literals
@@ -40,7 +40,9 @@ User = 'root'
 Password = 'alpine'
 Host = ''
 Port = 22
+
 use_delay = 0
+use_nowait = False
 skip_payload = False
 
 baseScript = """
@@ -719,7 +721,8 @@ def open_target_app(device, name_or_bundleid):
         if not pid:
             pid = device.spawn([bundle_identifier])
             session = device.attach(pid)
-            device.resume(pid)
+            if use_nowait: # if drop flag works!
+                device.resume(pid)
             print("spawn pid : " + str(pid))
         else:
             session = device.attach(pid)
@@ -757,9 +760,10 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
     parser.add_argument('-u', '--user', dest='ssh_user', help='Specify SSH username')
     parser.add_argument('-P', '--password', dest='ssh_password', help='Specify SSH password')
-    parser.add_argument('-D', '--delay', dest='delay_attach', help='Put a delay for attach')
     # add by jkh
     parser.add_argument('-S', '--skip-payload', dest='skip_payload', action='store_true', help='Skip payload download')
+    parser.add_argument('-E', '--delay', dest='delay_attach', help='Put a delay for attach')
+    parser.add_argument('-W', '--nowait', dest='nowait', action='store_true', help='Spawned process will be resumed')
 
     parser.add_argument('target', nargs='?', help='Bundle identifier or display name of the target app')
 
@@ -792,6 +796,8 @@ if __name__ == '__main__':
             skip_payload = True
         if args.delay_attach:
             use_delay = int(args.delay_attach)
+        if args.nowait:
+            use_nowait = True
 
         baseScript = baseScript + "send({app: app_path.toString()});" + baseScriptTail
 
