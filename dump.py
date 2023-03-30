@@ -532,12 +532,14 @@ def on_message(message, data):
 
     def progress(filename, size, sent):
         baseName = os.path.basename(filename)
+        '''
         if IS_PY2:
             t.desc = baseName.decode("utf-8")
         else:
             t.desc = baseName
+        '''
         t.total = size
-        t.update(sent - last_sent[0])
+        t.update(int(sent - last_sent[0]))
         last_sent[0] = 0 if size == sent else sent
 
     if 'payload' in message:
@@ -570,6 +572,7 @@ def on_message(message, data):
 
             scp_from = app_path
             scp_to = PAYLOAD_PATH + '/'
+            print(scp_to)
             with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
                 scp.get(scp_from, scp_to, recursive=True)
 
