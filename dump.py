@@ -40,6 +40,8 @@ User = 'root'
 Password = 'alpine'
 Host = ''
 Port = 22
+use_delay = 0
+skip_payload = False
 
 baseScript = """
 Module.ensureInitialized('Foundation');
@@ -510,6 +512,10 @@ def generate_ipa(path, display_name):
                 if os.name == 'nt':
                     os.chmod( from_dir, stat.S_IWRITE )
                     os.chmod( to_dir, stat.S_IWRITE )
+
+                work_dir = os.path.dirname(to_dir)
+                if not os.path.isdir(work_dir):
+                    os.makedirs(work_dir)
                 shutil.move(from_dir, to_dir)
 
         target_dir = os.path.join('.', PAYLOAD_DIR)
@@ -544,13 +550,15 @@ def on_message(message, data):
 
     if 'payload' in message:
         payload = message['payload']
+        print("payload : " + str(payload))
         if 'dump' in payload:
             origin_path = payload['path']
             dump_path = payload['dump']
 
             scp_from = dump_path
             scp_to = PAYLOAD_PATH + '/'
-            print('debug: ' + origin_path)
+            #print('debug src: ' + origin_path)
+            #print('debug to : ' + scp_to)
 
             with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
                 scp.get(scp_from, scp_to)
@@ -570,11 +578,13 @@ def on_message(message, data):
         if 'app' in payload:
             app_path = payload['app']
 
-            scp_from = app_path
-            scp_to = PAYLOAD_PATH + '/'
-            print(scp_to)
-            with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
-                scp.get(scp_from, scp_to, recursive=True)
+            global skip_payload
+            if not skip_payload:
+                scp_from = app_path
+                scp_to = PAYLOAD_PATH + '/'
+                print(scp_to)
+                with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
+                    scp.get(scp_from, scp_to, recursive=True)
 
             chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(app_path))
             chmod_args = ('chmod', '755', chmod_dir)
@@ -675,8 +685,8 @@ def load_js_file(session, filename):
     with codecs.open(filename, 'r', 'utf-8') as f:
         source = source + f.read()
     script = session.create_script(source)
-    script.on('message', on_message)
     script.load()
+    script.on('message', on_message)
 
     return script
 
@@ -710,8 +720,10 @@ def open_target_app(device, name_or_bundleid):
             pid = device.spawn([bundle_identifier])
             session = device.attach(pid)
             device.resume(pid)
+            print("spawn pid : " + str(pid))
         else:
             session = device.attach(pid)
+            print("attach pid : " + str(pid))
     except Exception as e:
         print(e)
 
@@ -723,8 +735,8 @@ def start_dump(session, ipa_name):
 
     #script = load_js_file(session, DUMP_JS)
     script = session.create_script(baseScript)
-    script.load()
     script.on('message', on_message)
+    script.load()
     script.post('dump')
     finished.wait()
 
@@ -745,6 +757,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
     parser.add_argument('-u', '--user', dest='ssh_user', help='Specify SSH username')
     parser.add_argument('-P', '--password', dest='ssh_password', help='Specify SSH password')
+    parser.add_argument('-D', '--delay', dest='delay_attach', help='Put a delay for attach')
     # add by jkh
     parser.add_argument('-S', '--skip-payload', dest='skip_payload', action='store_true', help='Skip payload download')
 
@@ -776,9 +789,11 @@ if __name__ == '__main__':
         if args.ssh_password:
             Password = args.ssh_password
         if args.skip_payload:
-            baseScript = baseScript + baseScriptTail
-        else:
-            baseScript = baseScript + "send({app: app_path.toString()});" + baseScriptTail
+            skip_payload = True
+        if args.delay_attach:
+            use_delay = int(args.delay_attach)
+
+        baseScript = baseScript + "send({app: app_path.toString()});" + baseScriptTail
 
         try:
             ssh = paramiko.SSHClient()
@@ -794,6 +809,8 @@ if __name__ == '__main__':
                 output_ipa = display_name
             output_ipa = re.sub('\.ipa$', '', output_ipa)
             if session:
+                if use_delay > 0:
+                    time.sleep(use_delay)
                 start_dump(session, output_ipa)
         except paramiko.ssh_exception.NoValidConnectionsError as e:
             print(e)
