@@ -10,6 +10,7 @@
 
 from __future__ import print_function
 from __future__ import unicode_literals
+import importlib
 import sys
 import codecs
 import frida
@@ -459,6 +460,10 @@ file_dict = {}
 finished = threading.Event()
 
 def get_usb_iphone():
+    # https://github.com/frida/frida-python/issues/189
+    importlib.reload(frida)
+    devices = frida.enumerate_devices()
+
     Type = 'usb'
     if int(frida.__version__.split('.')[0]) < 12:
         Type = 'tether'
